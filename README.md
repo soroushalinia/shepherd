@@ -23,6 +23,11 @@ $ echo feed > /proc/sheep; cat /proc/sheep
 $ sudo rmmod shepherd
 ```
 
+> **Security note (the fun kind):** `/proc/sheep` is world-writable (0666)
+> on purpose — the pasture has no fences. Any user on the system can pet,
+> feed, or scare the sheep. The kernel will let you know (see dmesg).
+> The sheep are now self-governing.
+
 Commands
 --------
 
@@ -42,6 +47,7 @@ Commands
 | `psalm23`      | The shepherd shall not segfault.               |
 | `countsheep`   | 1... 2... 3... You feel sleepy.                |
 | `42`           | The answer is 42 sheep.                        |
+| `cve`          | CVE-2026-SHEEP-0001: Improper access control.  |
 
 Easter eggs
 -----------
@@ -91,10 +97,25 @@ Kernel log
 ```console
 $ dmesg | grep shepherd
 shepherd: a lone sheep appears in /proc/sheep
+shepherd: SECURITY WARNING: pasture permissions are 0666.
+shepherd: the sheep are now self-governing.
+shepherd: CVE-2026-SHEEP-0001 triggered (uid 1000): unauthorized shepherd detected.
 shepherd: wolf detected!
 shepherd: Goodbye, shepherd.
 shepherd: Take care of your flock.
 ```
+
+CVE-2026-SHEEP-0001
+--------------------
+
+**Description:** Improper access control in Shepherd allows unprivileged
+users to pet the sheep.
+
+**Severity:** 🟢 Informational
+
+**Impact:** Excessive baaing. The sheep have accepted their new leader.
+
+**Mitigation:** Build a fence (`#define PROC_MODE 0660`).
 
 State machine
 -------------

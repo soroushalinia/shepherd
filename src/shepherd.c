@@ -21,7 +21,11 @@
 #include <linux/version.h>
 #include <linux/string.h>
 #include <linux/atomic.h>
+#include <linux/cred.h>
+#include <linux/mutex.h>
 #include <linux/printk.h>
+#include <linux/sched.h>
+#include <linux/uidgid.h>
 
 #define PROC_NAME  "sheep"
 #define PROC_MODE  0666
@@ -57,6 +61,8 @@ static bool sheared;
 static bool trust_shown;
 static char response[RESPONSE_LEN];
 static bool response_pending;
+
+static DEFINE_MUTEX(sheep_lock);
 
 #define SHEEP "\xf0\x9f\x90\x91"
 
@@ -112,6 +118,8 @@ static ssize_t sheep_read(struct file *file, char __user *buf,
 	if (*ppos > 0)
 		return 0;
 
+	mutex_lock(&sheep_lock);
+
 	if (atomic_inc_return(&read_count) == TRUST_READS && !trust_shown) {
 		trust_shown = true;
 		len = snprintf(local, sizeof(local),
@@ -133,6 +141,8 @@ static ssize_t sheep_read(struct file *file, char __user *buf,
 		current_state = STATE_NORMAL;
 
 done:
+	mutex_unlock(&sheep_lock);
+
 	if (len > count)
 		len = count;
 	if (len > 0 && copy_to_user(buf, local, len))
@@ -150,6 +160,89 @@ static size_t strip_trailing_whitespace(char *s, size_t len)
 	return len;
 }
 
+static const char *handle_command(const char *cmd)
+{
+	if (strcmp(cmd, "pet") == 0) {
+		consecutive_pets++;
+		if (consecutive_pets >= PET_LIMIT) {
+			consecutive_pets = 0;
+			return "The sheep politely asks for personal space.";
+		}
+		current_state = STATE_HAPPY;
+		last_fed = jiffies;
+		return SHEEP " *wags tail*";
+	}
+	consecutive_pets = 0;
+
+	if (strcmp(cmd, "feed") == 0) {
+		current_state = STATE_HAPPY;
+		last_fed = jiffies;
+		return SHEEP " nom nom nom";
+	}
+
+	if (strcmp(cmd, "sleep") == 0) {
+		current_state = STATE_SLEEPING;
+		return SHEEP " zzz...";
+	}
+
+	if (strcmp(cmd, "wake") == 0) {
+		current_state = STATE_NORMAL;
+		return SHEEP " Baa?";
+	}
+
+	if (strcmp(cmd, "wolf") == 0) {
+		current_state = STATE_SCARED;
+		pr_info_ratelimited("shepherd: wolf detected!\n");
+		return SHEEP " AAAAAAAAAAAAAAAAAAA";
+	}
+
+	if (strcmp(cmd, "calm") == 0) {
+		current_state = STATE_NORMAL;
+		return SHEEP " *breathes slowly*";
+	}
+
+	if (strcmp(cmd, "whoami") == 0)
+		return "You are the shepherd.";
+
+	if (strcmp(cmd, "call") == 0)
+		return SHEEP " " SHEEP " " SHEEP " " SHEEP " " SHEEP "\n"
+		       "The flock gathers.";
+
+	if (strcmp(cmd, "count") == 0) {
+		if (get_random_u32() & 1)
+			return "1 sheep.\nStill enough to start a flock.";
+		return "1...\n\nYep.\nStill just one.";
+	}
+
+	if (strcmp(cmd, "search") == 0) {
+		if (get_random_u32() % 100 == 0)
+			return "You found the lost sheep.";
+		return "No sheep were lost today.";
+	}
+
+	if (strcmp(cmd, "shear") == 0) {
+		if (sheared)
+			return "There's nothing left to shear.";
+		sheared = true;
+		return SHEEP " It's a little cold now.";
+	}
+
+	if (strcmp(cmd, "psalm23") == 0)
+		return "The shepherd shall not segfault.";
+
+	if (strcmp(cmd, "countsheep") == 0)
+		return "1...\n2...\n3...\n\nYou feel sleepy.";
+
+	if (strcmp(cmd, "42") == 0)
+		return "The answer is 42 sheep.";
+
+	if (strcmp(cmd, "cve") == 0)
+		return "CVE-2026-SHEEP-0001:\nImproper access control.\n"
+		       "Severity: informational.\nImpact: excessive baaing.";
+
+	return "The sheep doesn't understand.";
+}
+
 static ssize_t sheep_write(struct file *file, const char __user *buf,
 			   size_t count, loff_t *ppos)
 {
@@ -164,108 +257,19 @@ static ssize_t sheep_write(struct file *file, const char __user *buf,
 
 	cmd[count] = '\0';
 	len = strip_trailing_whitespace(cmd, strlen(cmd));
+	if (len == 0)
+		return count;
 
+	if (!uid_eq(current_euid(), GLOBAL_ROOT_UID))
+		pr_info_ratelimited("shepherd: CVE-2026-SHEEP-0001 triggered (uid %u): "
+				    "unauthorized shepherd detected.\n",
+				    from_kuid(&init_user_ns, current_euid()));
+
+	mutex_lock(&sheep_lock);
 	last_interaction = jiffies;
+	set_response(handle_command(cmd));
+	mutex_unlock(&sheep_lock);
 
-	if (strcmp(cmd, "pet") == 0) {
-		consecutive_pets++;
-		if (consecutive_pets >= PET_LIMIT) {
-			set_response("The sheep politely asks for personal space.");
-			consecutive_pets = 0;
-			return count;
-		}
-		current_state = STATE_HAPPY;
-		last_fed = jiffies;
-		set_response(SHEEP " *wags tail*");
-		return count;
-	}
-	consecutive_pets = 0;
-
-	if (strcmp(cmd, "feed") == 0) {
-		current_state = STATE_HAPPY;
-		last_fed = jiffies;
-		set_response(SHEEP " nom nom nom");
-		return count;
-	}
-
-	if (strcmp(cmd, "sleep") == 0) {
-		current_state = STATE_SLEEPING;
-		set_response(SHEEP " zzz...");
-		return count;
-	}
-
-	if (strcmp(cmd, "wake") == 0) {
-		current_state = STATE_NORMAL;
-		set_response(SHEEP " Baa?");
-		return count;
-	}
-
-	if (strcmp(cmd, "wolf") == 0) {
-		current_state = STATE_SCARED;
-		pr_info("shepherd: wolf detected!\n");
-		set_response(SHEEP " AAAAAAAAAAAAAAAAAAA");
-		return count;
-	}
-
-	if (strcmp(cmd, "calm") == 0) {
-		current_state = STATE_NORMAL;
-		set_response(SHEEP " *breathes slowly*");
-		return count;
-	}
-
-	if (strcmp(cmd, "whoami") == 0) {
-		set_response("You are the shepherd.");
-		return count;
-	}
-
-	if (strcmp(cmd, "call") == 0) {
-		set_response(SHEEP " " SHEEP " " SHEEP " " SHEEP " " SHEEP "\n"
-			     "The flock gathers.");
-		return count;
-	}
-
-	if (strcmp(cmd, "count") == 0) {
-		if (get_random_u32() & 1)
-			set_response("1 sheep.\nStill enough to start a flock.");
-		else
-			set_response("1...\n\nYep.\nStill just one.");
-		return count;
-	}
-
-	if (strcmp(cmd, "search") == 0) {
-		if (get_random_u32() % 100 == 0)
-			set_response("You found the lost sheep.");
-		else
-			set_response("No sheep were lost today.");
-		return count;
-	}
-
-	if (strcmp(cmd, "shear") == 0) {
-		if (!sheared) {
-			sheared = true;
-			set_response(SHEEP " It's a little cold now.");
-		} else {
-			set_response("There's nothing left to shear.");
-		}
-		return count;
-	}
-
-	if (strcmp(cmd, "psalm23") == 0) {
-		set_response("The shepherd shall not segfault.");
-		return count;
-	}
-
-	if (strcmp(cmd, "countsheep") == 0) {
-		set_response("1...\n2...\n3...\n\nYou feel sleepy.");
-		return count;
-	}
-
-	if (strcmp(cmd, "42") == 0) {
-		set_response("The answer is 42 sheep.");
-		return count;
-	}
-
-	set_response("The sheep doesn't understand.");
 	return count;
 }
 
@@ -300,6 +304,8 @@ static int __init shepherd_init(void)
 	clear_response();
 
 	pr_info("shepherd: a lone sheep appears in /proc/sheep\n");
+	pr_warn("shepherd: SECURITY WARNING: pasture permissions are 0666.\n");
+	pr_info("shepherd: the sheep are now self-governing.\n");
 	return 0;
 }
 
