@@ -1,5 +1,4 @@
-shepherd
-========
+# shepherd
 
 shepherd is a Linux kernel module that places a single opinionated sheep
 inside `/proc/sheep`. It serves no purpose beyond reminding you that not
@@ -8,12 +7,12 @@ discover a few hidden surprises.
 
 > **You're the shepherd. Not the sheep.**
 
----
-
-Quick Start
------------
+## Quick Start
 
 ```console
+$ curl -L -O https://github.com/soroushalinia/shepherd/releases/download/v1.0.0/shepherd-1.0.0.tar.gz
+$ tar xzf shepherd-1.0.0.tar.gz
+$ cd shepherd-1.0.0
 $ make
 $ sudo insmod shepherd.ko
 $ cat /proc/sheep
@@ -23,13 +22,12 @@ $ echo feed > /proc/sheep; cat /proc/sheep
 $ sudo rmmod shepherd
 ```
 
-> **Security note (the fun kind):** `/proc/sheep` is world-writable (0666)
-> on purpose — the pasture has no fences. Any user on the system can pet,
+> **Security note (the fun kind):** `/proc/sheep` is world writable (0666)
+> on purpose, the pasture has no fences. Any user on the system can pet,
 > feed, or scare the sheep. The kernel will let you know (see dmesg).
 > The sheep are now self-governing.
 
-Commands
---------
+## Commands
 
 | Command        | Response                                       |
 |----------------|------------------------------------------------|
@@ -49,8 +47,7 @@ Commands
 | `42`           | The answer is 42 sheep.                        |
 | `cve`          | CVE-2026-SHEEP-0001: Improper access control.  |
 
-Easter eggs
------------
+## Easter eggs
 
 | Trigger                  | Message                                        |
 |--------------------------|------------------------------------------------|
@@ -58,8 +55,10 @@ Easter eggs
 | 100 consecutive `pet`s   | The sheep politely asks for personal space.    |
 | Unloading the module     | Goodbye, shepherd. Take care of your flock.    |
 
-Building
---------
+## Building
+
+Quick Start covers the full build from the release tarball. These are the
+details behind it.
 
 **Requirements:** Linux kernel headers for your running kernel.
 
@@ -70,29 +69,25 @@ Building
 | Fedora       | `sudo dnf install kernel-devel`          |
 | openSUSE     | `sudo zypper install kernel-devel`       |
 
+To install the module into `/lib/modules` instead of just loading it:
+
 ```console
 $ make
 $ sudo make modules_install
 ```
 
-Or without install:
+The `.ko` is only good for the exact kernel you compiled against. For other
+kernels or architectures, grab the tarball and rebuild. There is no binary
+release; the tarball is the package.
 
-```console
-$ make
-$ sudo insmod shepherd.ko
-$ sudo rmmod shepherd
-```
-
-Uninstall
----------
+## Uninstall
 
 ```console
 $ sudo make modules_uninstall
 $ sudo rm -f /lib/modules/$(uname -r)/extra/shepherd.ko
 ```
 
-Kernel log
-----------
+## Kernel log
 
 ```console
 $ dmesg | grep shepherd
@@ -105,8 +100,7 @@ shepherd: Goodbye, shepherd.
 shepherd: Take care of your flock.
 ```
 
-CVE-2026-SHEEP-0001
---------------------
+## CVE-2026-SHEEP-0001
 
 **Description:** Improper access control in Shepherd allows unprivileged
 users to pet the sheep.
@@ -117,8 +111,7 @@ users to pet the sheep.
 
 **Mitigation:** Build a fence (`#define PROC_MODE 0660`).
 
-State machine
--------------
+## State machine
 
 The sheep has six states that change based on your actions and the
 passage of time:
@@ -139,15 +132,14 @@ passage of time:
       └────────┘     60s         └─────────┘
 ```
 
-- **NORMAL:** Default state. Content but unremarkable.
-- **HAPPY:** After being petted or fed.
-- **HUNGRY:** 30 seconds without food.
-- **SLEEPING:** Put to bed with `sleep`. Stays asleep until `wake`.
-- **SCARED:** After a wolf encounter. Stays scared until `calm`.
-- **IGNORED:** 60 seconds without any interaction.
+* **NORMAL:** Default state. Content but unremarkable.
+* **HAPPY:** After being petted or fed.
+* **HUNGRY:** 30 seconds without food.
+* **SLEEPING:** Put to bed with `sleep`. Stays asleep until `wake`.
+* **SCARED:** After a wolf encounter. Stays scared until `calm`.
+* **IGNORED:** 60 seconds without any interaction.
 
-Architecture
-------------
+## Architecture
 
 ```
         ┌─────────────────────────────────────────┐
@@ -177,8 +169,7 @@ Architecture
               echo cat >      cat /proc/sheep
 ```
 
-Files
------
+## Files
 
 | File           | Description                        |
 |----------------|------------------------------------|
@@ -187,7 +178,6 @@ Files
 | `README.md`    | This file                          |
 | `build/`       | Build output (generated)           |
 
-License
--------
+## License
 
 GNU General Public License v2.0 only. See [COPYING](COPYING) for details.
